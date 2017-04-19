@@ -9,6 +9,12 @@
 			"revisionTime": "2017-02-07T18:34:08Z"
 		},
 		{
+			"checksumSHA1": "mLncaksjf/xly4qcYWvqPTdOsIM=",
+			"path": "github.com/chai2010/webp",
+			"revision": "3bf12259b1cd565687ea00c9e5a6b648868133c5",
+			"revisionTime": "2017-02-24T01:05:28Z"
+		},
+		{
 			"checksumSHA1": "1OmwbWaOG0jEW8FJ5dqnpbhm1ZY=",
 			"path": "github.com/disintegration/imaging",
 			"revision": "243d2d8673c1225a6afceeb9b3b4423d485dc8df",

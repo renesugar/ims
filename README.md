@@ -29,6 +29,8 @@ available:
 		- `quality`: the quality out of 100 for the output image (Default: 80).
       - `png`: converts image to `image/png` encoding
       - `gif`: converts image to `image/gif` encoding
+      - `webp`: converts image to `image/webp` encoding with lossless compression, some additional parameters are supported:
+		- `quality`: the quality out of 100 for the output image (Default: 80).
 - `width`: output image width (default is the original width).
 - `height`: output image height. If both `width` and `height` are provided, the
       `width` will be used instead.

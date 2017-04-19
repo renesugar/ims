@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/chai2010/webp"
 	"github.com/pkg/errors"
 )
 
@@ -44,6 +45,8 @@ func GetEncoder(format string, r *http.Request) Encoder {
 		return EncoderFunc(PNGEncode)
 	case "gif":
 		return EncoderFunc(GIFEncoder)
+	case "webp":
+		return NewWEBPEncoder(r)
 	}
 
 	switch format {
@@ -53,6 +56,8 @@ func GetEncoder(format string, r *http.Request) Encoder {
 		return EncoderFunc(PNGEncode)
 	case "gif":
 		return EncoderFunc(GIFEncoder)
+	case "webp":
+		return NewWEBPEncoder(r)
 	default:
 		return NewJPEGEncoder(r)
 	}
@@ -111,6 +116,38 @@ func (je JPEGEncoder) Encode(i image.Image, w http.ResponseWriter) error {
 
 	if err := jpeg.Encode(w, i, &jpeg.Options{
 		Quality: je.Quality,
+	}); err != nil {
+		return errors.Wrap(err, "can't encode the jpeg")
+	}
+
+	return nil
+}
+
+// NewWEBPEncoder creates a new WEBPEncoder based on the input request, this
+// parses the `q` query variable to check to see if it needs to change the
+// default quality format.
+func NewWEBPEncoder(r *http.Request) WEBPEncoder {
+	quality, err := strconv.Atoi(r.URL.Query().Get("quality"))
+	if err != nil || quality <= 0 {
+		quality = defaultQuality
+	}
+
+	return WEBPEncoder{
+		Quality: float32(quality / 100),
+	}
+}
+
+// WEBPEncoder allows the encoding of WEBP's to a http.ResponseWriter.
+type WEBPEncoder struct {
+	Quality float32
+}
+
+// Encode writes the encoded image data out to the http.ResponseWriter.
+func (we WEBPEncoder) Encode(i image.Image, w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "image/webp")
+
+	if err := webp.Encode(w, i, &webp.Options{
+		Quality: we.Quality,
 	}); err != nil {
 		return errors.Wrap(err, "can't encode the jpeg")
 	}
