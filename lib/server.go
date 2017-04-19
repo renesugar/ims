@@ -69,15 +69,15 @@ func ProcessImage(timeout time.Duration, input io.Reader, w http.ResponseWriter,
 // GetFilename fetches the filename from the request path.
 func GetFilename(r *http.Request) (string, error) {
 
-	// We expect that the router sends us requests in the form `/resize/:filename`
+	// We expect that the router sends us requests in the form `/:filename`
 	// so we check to see if the path contains the image url that we want to
 	// parse. In this case, we check to see that the path is at least 9 characters
 	// long, which will ensure that the filename has at least 1 character.
-	if len(r.URL.Path) < 9 {
+	if len(r.URL.Path) < 2 {
 		return "", errors.New("filename too short")
 	}
 
-	return r.URL.Path[8:], nil
+	return r.URL.Path[1:], nil
 }
 
 // HandleFileSystemResize performs the actual resizing by loading the image
