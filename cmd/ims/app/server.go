@@ -13,6 +13,7 @@ import (
 	"github.com/urfave/negroni"
 	"github.com/wyattjoh/ims/cmd/ims/handlers"
 	"github.com/wyattjoh/ims/internal/platform/providers"
+	"github.com/wyattjoh/ims/internal/platform/signing"
 )
 
 // MountEndpoint mounts an endpoint on the mux and logs out the action.
@@ -48,7 +49,17 @@ type ServerOpts struct {
 	// writing them out to the http response.
 	CacheTimeout time.Duration
 
+	// CORSDomains are the permitted domains that will be permitted to make
+	// CORS requests from.
 	CORSDomains []string
+
+	// SigningSecret is used to mount a signing middleware on the image
+	// processing domain to only allow signed requests through.
+	SigningSecret string
+
+	// IncludePath when true will add the path component to the signing value
+	// when request signing has been enabled.
+	IncludePath bool
 }
 
 // Serve creates and starts a new server to provide image resizing services.
@@ -84,6 +95,16 @@ func Serve(opts *ServerOpts) error {
 	// Wrap the handler with the image handler and the providers.
 	handler := providers.Middleware(p, handlers.Image(opts.CacheTimeout))
 
+	if opts.SigningSecret != "" {
+		// Wrap the handler with the signing middleware when we have a secret
+		// for signing provided.
+		handler = signing.Middleware(opts.SigningSecret, opts.IncludePath, handler)
+
+		logrus.WithField("withPath", opts.IncludePath).Debug("signing middleware enabled")
+	} else {
+		logrus.Debug("signing middleware disabled, --signing-secret not provided")
+	}
+
 	if opts.DisableMetrics {
 
 		// Mount the resize handler on the mux.
@@ -103,7 +124,11 @@ func Serve(opts *ServerOpts) error {
 	}
 
 	// Create the negroni middleware bundle.
-	n := negroni.New(negroni.NewRecovery(), negronilogrus.NewMiddleware())
+	n := negroni.New(
+		negroni.NewRecovery(),
+		negroni.HandlerFunc(Tracer),
+		negronilogrus.NewMiddleware(),
+	)
 
 	if len(opts.CORSDomains) > 0 {
 

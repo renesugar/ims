@@ -2,11 +2,15 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	jaeger "github.com/uber/jaeger-client-go"
+	"github.com/uber/jaeger-client-go/transport"
 	"github.com/urfave/cli"
 	"github.com/wyattjoh/ims/cmd/ims/app"
 )
@@ -14,14 +18,17 @@ import (
 const (
 	// These flags are used as constants to refer to the different supported flags
 	// by the application.
-	flagJSON           = "json"
-	flagListenAddr     = "listen-addr"
-	flagDebug          = "debug"
-	flagBackend        = "backend"
-	flagOriginCache    = "origin-cache"
-	flagDisableMetrics = "disable-metrics"
-	flagTimeout        = "timeout"
-	flagCORSDomain     = "cors-domain"
+	flagJSON                   = "json"
+	flagListenAddr             = "listen-addr"
+	flagDebug                  = "debug"
+	flagBackend                = "backend"
+	flagOriginCache            = "origin-cache"
+	flagDisableMetrics         = "disable-metrics"
+	flagTimeout                = "timeout"
+	flagCORSDomain             = "cors-domain"
+	flagSigningSecret          = "signing-secret"
+	flagIncludePathWhenSigning = "signing-with-path"
+	flagTracingURI             = "tracing-uri"
 
 	defaultListenAddr = "127.0.0.1:8080"
 	defaultTimeout    = 15 * time.Minute
@@ -53,6 +60,18 @@ func main() {
 			Name:  flagOriginCache,
 			Usage: "cache the origin resources based on their cache headers (:memory: for memory based cache, directory name for file based, not specified for disabled)",
 		},
+		cli.StringFlag{
+			Name:  flagSigningSecret,
+			Usage: "when provided, will be used to verify signed image requests made to the domain",
+		},
+		cli.StringFlag{
+			Name:  flagTracingURI,
+			Usage: "when provided, will be used to send tracing information via opentracing",
+		},
+		cli.BoolFlag{
+			Name:  flagIncludePathWhenSigning,
+			Usage: "when provided, the path will be included in the value to compute the signature",
+		},
 		cli.BoolFlag{
 			Name:  flagDisableMetrics,
 			Usage: "disable the prometheus metrics",
@@ -80,6 +99,24 @@ func main() {
 	app.Run(os.Args)
 }
 
+// SetupTracing will setup the tracing using Jaeger.
+func SetupTracing(tracingURI string) (opentracing.Tracer, io.Closer) {
+	var sampler jaeger.Sampler
+	var reporter jaeger.Reporter
+	if tracingURI == "" {
+		sampler = jaeger.NewConstSampler(false)
+		reporter = jaeger.NewNullReporter()
+		logrus.Info("not reporting tracing information, missing --tracing-uri option")
+	} else {
+		sampler = jaeger.NewRateLimitingSampler(100)
+		sender := transport.NewHTTPTransport(tracingURI)
+		reporter = jaeger.NewRemoteReporter(sender)
+		logrus.WithField("tracingURI", tracingURI).Info("reporting tracing information")
+	}
+
+	return jaeger.NewTracer("ims", sampler, reporter)
+}
+
 // ServeAction starts the ims daemon.
 func ServeAction(c *cli.Context) error {
 	var backends []string
@@ -103,6 +140,11 @@ func ServeAction(c *cli.Context) error {
 		logrus.SetFormatter(&logrus.JSONFormatter{})
 	}
 
+	// Configure the tracer.
+	tracer, closer := SetupTracing(c.String(flagTracingURI))
+	defer closer.Close()
+	opentracing.InitGlobalTracer(tracer)
+
 	// Setup the server options.
 	opts := &app.ServerOpts{
 		Addr:           c.String(flagListenAddr),
@@ -112,6 +154,8 @@ func ServeAction(c *cli.Context) error {
 		OriginCache:    c.String(flagOriginCache),
 		CacheTimeout:   c.Duration(flagTimeout),
 		CORSDomains:    c.StringSlice(flagCORSDomain),
+		SigningSecret:  c.String(flagSigningSecret),
+		IncludePath:    c.Bool(flagIncludePathWhenSigning),
 	}
 
 	if err := app.Serve(opts); err != nil {
